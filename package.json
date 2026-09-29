@@ -1,0 +1,16 @@
+{
+  "name": "zen-space-chips",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zen Browser mod: clickable Space chips on the bookmarks toolbar",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.1"
+  }
+}
