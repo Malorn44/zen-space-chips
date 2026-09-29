@@ -15,11 +15,14 @@
 export const WIDGET_ID = "zen-space-chips";
 export const PREF_MODE = "uc.space-chips.mode";
 export const PREF_DIVIDER = "uc.space-chips.divider";
+export const PREF_SHOW_BORDER = "uc.space-chips.show-border";
 export const PREF_PLACED = "uc.space-chips.initial-placement-done";
 export const MODES = ["icon", "icon+name", "name"];
 // auto: only when the chips and the bookmarks have no room between them.
 // always: whenever they share a toolbar, and after the chips otherwise.
 export const DIVIDERS = ["auto", "always", "never"];
+// Ring width in screen pixels.
+export const BORDER_DEVICE_PX = 2;
 
 const DEFAULT_MODE = "icon+name";
 const DEFAULT_DIVIDER = "auto";
@@ -31,12 +34,13 @@ const CUSTOMIZABLE_UI_URLS = [
   "resource:///modules/CustomizableUI.sys.mjs",
 ];
 
-// Default-branch values make both prefs show up in about:config before anyone
+// Default-branch values make the prefs show up in about:config before anyone
 // sets them. They aren't saved, so this runs on every start.
 {
   const defaults = Services.prefs.getDefaultBranch("");
   defaults.setStringPref(PREF_MODE, DEFAULT_MODE);
   defaults.setStringPref(PREF_DIVIDER, DEFAULT_DIVIDER);
+  defaults.setBoolPref(PREF_SHOW_BORDER, true);
 }
 
 /** The only code that touches Zen internals. */
@@ -66,6 +70,23 @@ export const Zen = {
   // Same call Zen's sidebar strip makes; Zen syncs the order to every window.
   reorder: (win, uuid, index) =>
     win.gZenWorkspaces.reorderWorkspace(uuid, index),
+  // The CSS background Zen paints on the toolbar for this Space, or "" if
+  // there's none (Zen's default theme) or the theme picker's API is missing.
+  spaceBackground(win, space) {
+    const picker = win.gZenThemePicker;
+    if (
+      !space.theme?.gradientColors?.length ||
+      typeof picker?.getGradientForWorkspace !== "function"
+    ) {
+      return "";
+    }
+    return picker.getGradientForWorkspace(space).toolbarGradient ?? "";
+  },
+  // The color Zen shows through the transparent parts of those gradients.
+  toolbarBase: win => win.gZenThemePicker?.getToolbarModifiedBase?.() ?? "",
+  forgetGradient(win, uuid) {
+    win.gZenThemePicker?.invalidateGradientCache?.(uuid);
+  },
   // An emoji, an SVG URL, or Zen's first-letter fallback.
   icon(win, space) {
     const ws = win.gZenWorkspaces;
@@ -94,6 +115,159 @@ export function readMode() {
 export function readDivider() {
   const divider = Services.prefs.getStringPref(PREF_DIVIDER, DEFAULT_DIVIDER);
   return DIVIDERS.includes(divider) ? divider : DEFAULT_DIVIDER;
+}
+
+export function readShowBorder() {
+  return Services.prefs.getBoolPref(PREF_SHOW_BORDER, true);
+}
+
+/**
+ * The ring width in CSS px that covers a whole number of screen pixels. A
+ * fractional width gets its inner edges rounded unevenly, so one side of the
+ * ring comes out thinner than the others.
+ */
+export function borderWidth(devicePixelRatio = 1) {
+  const ratio = devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const px = Math.max(1, Math.round(BORDER_DEVICE_PX * ratio)) / ratio;
+  return `${Math.round(px * 1000) / 1000}px`;
+}
+
+// ---------------------------------------------------------------------------
+// Accent border
+//
+// Each chip gets a ring painted with the background Zen gives that Space's
+// toolbar, so the colors sit in the same layout and proportions as in Zen.
+// Each color's lightness is pulled toward a readable level and its hue and
+// saturation stay put. Changing lightness in HSL keeps the hue; scaling RGB
+// channels would clip them at 255 and shift it. There's a version for a dark
+// toolbar and one for a light toolbar, and the CSS picks between them.
+//
+// Zen caches each Space's background, so the cache entry is dropped whenever
+// a Space's theme changes or light/dark mode flips.
+
+// Same math as Zen's rgbToHsl(), hueToRgb() and hslToRgb().
+function rgbToHsl(r, g, b) {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) {
+      h = ((g - b) / d) % 6;
+    } else if (max === g) {
+      h = (b - r) / d + 2;
+    } else {
+      h = (r - g) / d + 4;
+    }
+  }
+  const l = (min + max) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  return [h * 60, s, l];
+}
+
+function hueToRgb(p, q, t) {
+  if (t < 0) {
+    t += 1;
+  }
+  if (t > 1) {
+    t -= 1;
+  }
+  if (t < 1 / 6) {
+    return p + (q - p) * 6 * t;
+  }
+  if (t < 1 / 2) {
+    return q;
+  }
+  if (t < 2 / 3) {
+    return p + (q - p) * (2 / 3 - t) * 6;
+  }
+  return p;
+}
+
+function hslToRgb(h, s, l) {
+  if (s === 0) {
+    const v = Math.round(l * 255);
+    return [v, v, v];
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [h + 1 / 3, h, h - 1 / 3].map(t => Math.round(hueToRgb(p, q, t) * 255));
+}
+
+/**
+ * One color with its lightness pulled toward what reads well on a dark or
+ * light toolbar. Uses the lightness part of Zen's getAccentColorForUI();
+ * hue and saturation don't change.
+ */
+export function liftColor([r, g, b], dark) {
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const target = dark ? 0.62 : 0.42;
+  return hslToRgb(h / 360, Math.min(1, s), l * 0.4 + target * 0.6);
+}
+
+const CSS_COLOR = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)|#([0-9a-f]{6})\b/gi;
+
+/** Every rgb(), rgba() and #rrggbb color in a CSS value, lifted. */
+export function liftColors(css, dark) {
+  return css.replace(CSS_COLOR, (_match, r, g, b, alpha, hex) => {
+    const rgb = hex
+      ? [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16))
+      : [r, g, b].map(Number);
+    const [nr, ng, nb] = liftColor(rgb, dark);
+    return `rgba(${nr}, ${ng}, ${nb}, ${alpha ?? 1})`;
+  });
+}
+
+// window -> Map(Space uuid -> theme JSON seen at the last render)
+const seenThemes = new WeakMap();
+
+/** The ring's CSS backgrounds for a dark and a light toolbar, or null. */
+function accentFor(win, space) {
+  const theme = JSON.stringify(space.theme ?? null);
+  let seen = seenThemes.get(win);
+  if (!seen) {
+    seen = new Map();
+    seenThemes.set(win, seen);
+  }
+  if (seen.has(space.uuid) && seen.get(space.uuid) !== theme) {
+    Zen.forgetGradient(win, space.uuid);
+  }
+  seen.set(space.uuid, theme);
+  let background;
+  try {
+    background = Zen.spaceBackground(win, space);
+  } catch (e) {
+    console.error(LOG_PREFIX, "couldn't get the Space's colors", e);
+    return null;
+  }
+  if (!background) {
+    return null;
+  }
+  // A one-color theme comes back as a plain color, which has to be the only
+  // background layer. Gradients can have transparent areas where Zen shows
+  // the toolbar base color, so that goes underneath (not lifted).
+  const base = background.includes("gradient(") ? Zen.toolbarBase(win) : "";
+  const withBase = css => (base ? `${css}, ${base}` : css);
+  return {
+    dark: withBase(liftColors(background, true)),
+    light: withBase(liftColors(background, false)),
+  };
+}
+
+// Zen caches each Space's colors for the current light/dark mode.
+function onThemeChange() {
+  for (const win of Services.wm.getEnumerator("navigator:browser")) {
+    if (!ready.has(win)) {
+      continue;
+    }
+    for (const space of Zen.spaces(win)) {
+      Zen.forgetGradient(win, space.uuid);
+    }
+    render(win);
+  }
 }
 
 function isImageIcon(icon) {
@@ -132,10 +306,18 @@ function setActive(chip, isActive) {
 // What each chip currently shows, so unchanged chips can be skipped.
 const chipContent = new WeakMap();
 
-function updateChip(doc, chip, space, { mode, icon }) {
+function updateChip(doc, chip, space, { mode, icon, accent = null }) {
   const name = space.name ?? "";
   chip.setAttribute("tooltiptext", name);
   chip.setAttribute("aria-label", name);
+  for (const scheme of ["dark", "light"]) {
+    if (accent) {
+      chip.style.setProperty(`--space-accent-${scheme}`, accent[scheme]);
+    } else {
+      chip.style.removeProperty(`--space-accent-${scheme}`);
+    }
+  }
+  chip.toggleAttribute("has-accent", !!accent);
   const content = JSON.stringify([mode, icon, name]);
   if (chipContent.get(chip) === content) {
     return;
@@ -154,14 +336,14 @@ function updateChip(doc, chip, space, { mode, icon }) {
   chip.replaceChildren(...parts);
 }
 
-export function buildChip(doc, space, { isActive, mode, icon }) {
+export function buildChip(doc, space, { isActive, ...options }) {
   const chip = doc.createXULElement("toolbarbutton");
   chip.className = "zen-space-chip";
   chip.setAttribute("zen-workspace-id", space.uuid);
   // Zen's Space context menu looks for closest("toolbarbutton")[zen-workspace-id].
   chip.setAttribute("context", "zenWorkspaceMoreActions");
   setActive(chip, isActive);
-  updateChip(doc, chip, space, { mode, icon });
+  updateChip(doc, chip, space, options);
   return chip;
 }
 
@@ -184,16 +366,23 @@ export function fillRow(win, row) {
   // through any queued switches first, which would make the highlight jump.
   const shownActive = pendingSwitches.get(win)?.uuid ?? Zen.active(win);
   row.setAttribute("chips-mode", mode);
-  // The CSS draws the divider; this just passes the setting along.
+  // The CSS draws the divider; this passes the setting along.
   row.setAttribute("divider", readDivider());
 
   const stale = new Map();
   for (const chip of list.children) {
     stale.set(chip.getAttribute("zen-workspace-id"), chip);
   }
+  const showBorder = readShowBorder();
+  row.toggleAttribute("show-border", showBorder);
+  row.style.setProperty("--zen-space-chips-border", borderWidth(win.devicePixelRatio));
   let cursor = list.firstElementChild;
   for (const space of Zen.spaces(win)) {
-    const options = { mode, icon: Zen.icon(win, space) };
+    const options = {
+      mode,
+      icon: Zen.icon(win, space),
+      accent: showBorder ? accentFor(win, space) : null,
+    };
     let chip = stale.get(space.uuid);
     stale.delete(space.uuid);
     if (chip) {
@@ -457,9 +646,27 @@ async function attach(win) {
   rerender();
   try {
     watchDividerNeed(win);
+    watchPixelRatio(win);
   } catch (e) {
-    console.error(LOG_PREFIX, "divider watch setup failed", e);
+    console.error(LOG_PREFIX, "watcher setup failed", e);
   }
+}
+
+// Moving the window to a screen with different scaling changes how wide the
+// ring has to be to stay on whole screen pixels.
+function watchPixelRatio(win) {
+  if (typeof win.matchMedia !== "function") {
+    return;
+  }
+  const query = win.matchMedia(`(resolution: ${win.devicePixelRatio}dppx)`);
+  query.addEventListener(
+    "change",
+    () => {
+      render(win);
+      watchPixelRatio(win);
+    },
+    { once: true }
+  );
 }
 
 function onRowCommand(event) {
@@ -678,6 +885,9 @@ export function register() {
   }
   Services.prefs.addObserver(PREF_MODE, renderAllWindows);
   Services.prefs.addObserver(PREF_DIVIDER, renderAllWindows);
+  Services.prefs.addObserver(PREF_SHOW_BORDER, renderAllWindows);
+  // Zen sends this when light/dark mode changes.
+  Services.obs.addObserver(onThemeChange, "zen-theme-change");
 }
 
 // Loading CustomizableUI before the first window is up could read the default

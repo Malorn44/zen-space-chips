@@ -6,6 +6,7 @@
 /* Only as wide as the chips, wherever it's placed. The bookmarks keep
    Firefox's sizing and fill the rest of the toolbar. */
 #zen-space-chips {
+  --zen-space-chip-radius: var(--toolbarbutton-border-radius, 6px);
   display: flex;
   align-items: center;
   flex: none;
@@ -55,8 +56,13 @@
 }
 /* divider-idle-rules:end */
 
-.zen-space-chip {
-  appearance: none;
+/* The chip paints nothing itself. Its hover/selected fill is ::before and
+   its ring is ::after, both drawn by these rules. The !important keeps native
+   button styling, and themes that restyle every toolbarbutton, from painting
+   a differently shaped background under them. */
+#zen-space-chips .zen-space-chip {
+  appearance: none !important;
+  background: none !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -67,9 +73,12 @@
   margin: 0;
   padding: 0 6px;
   border: none;
-  border-radius: var(--toolbarbutton-border-radius, 6px);
+  border-radius: var(--zen-space-chip-radius);
   color: inherit;
   scroll-margin-inline: 12px;
+  position: relative;
+  /* Keeps the z-index: -1 layers below the icon and name but inside the chip. */
+  isolation: isolate;
 
   /* Zen's SVG icons use fill="context-fill", so this tints them to the text color. */
   -moz-context-properties: fill, fill-opacity;
@@ -77,19 +86,37 @@
   fill-opacity: 0.75;
 
   opacity: 0.7;
-  transition:
-    opacity 0.15s,
-    background-color 0.15s;
+  transition: opacity 0.15s;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  &::before {
+    transition: background-color 0.15s;
+  }
 
   &:hover {
     opacity: 1;
-    background-color: color-mix(in srgb, currentColor 10%, transparent);
+
+    &::before {
+      background-color: color-mix(in srgb, currentColor 10%, transparent);
+    }
   }
 
   &[active="true"] {
     opacity: 1;
     fill-opacity: 1;
-    background-color: color-mix(in srgb, currentColor 16%, transparent);
+
+    &::before {
+      background-color: color-mix(in srgb, currentColor 16%, transparent);
+    }
   }
 
   &:focus-visible {
@@ -104,13 +131,51 @@
 
   &[dragged] {
     opacity: 1;
-    background-color: color-mix(in srgb, currentColor 22%, transparent);
     cursor: grabbing;
+
+    &::before {
+      background-color: color-mix(in srgb, currentColor 22%, transparent);
+    }
   }
 }
 
 #zen-space-chips[reordering] {
   cursor: grabbing;
+}
+
+/* The ring (uc.space-chips.show-border): the Space's toolbar background from
+   Zen with its colors lifted (see the JS), masked down to the edge.
+   --zen-space-chips-border is set by the JS to a whole number of screen
+   pixels, since a fractional width makes one side come out thinner.
+   --space-accent-dark and -light are the same colors lifted for a dark or a
+   light toolbar. Zen marks which one the current Space has with
+   zen-should-be-dark-mode; without a Space theme, the system scheme decides.
+   test/accent.test.mjs parses this selector. */
+/* accent-rules:start */
+#zen-space-chips[show-border] .zen-space-chip[has-accent]::after {
+  padding: var(--zen-space-chips-border, 2px);
+  background: var(--space-accent-dark);
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+}
+/* accent-rules:end */
+
+:root[zen-should-be-dark-mode="false"] #zen-space-chips[show-border] .zen-space-chip[has-accent]::after {
+  background: var(--space-accent-light);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([zen-should-be-dark-mode]) #zen-space-chips[show-border] .zen-space-chip[has-accent]::after {
+    background: var(--space-accent-light);
+  }
+}
+
+/* With a ring, the fill sits inside it with matching inner corners. If it ran
+   under the ring, it would show through the ring's smoothed corner pixels. */
+#zen-space-chips[show-border] .zen-space-chip[has-accent]::before {
+  inset: var(--zen-space-chips-border, 2px);
+  border-radius: max(0px, calc(var(--zen-space-chip-radius) - var(--zen-space-chips-border, 2px)));
 }
 
 .zen-space-chip-icon {

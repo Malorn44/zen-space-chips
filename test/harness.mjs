@@ -4,8 +4,6 @@
 
 import { JSDOM } from "jsdom";
 
-const XUL_NS =
-  "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 export const STARTUP_TOPIC = "browser-delayed-startup-finished";
 export const CUI_URL =
   "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs";
@@ -15,16 +13,21 @@ class FakePrefs {
   #defaults = new Map(); // default branch
   #observers = [];
   // Like Firefox: a user value wins, then the default branch, then the fallback.
-  getStringPref(name, fallback) {
+  #get(name, fallback) {
     if (this.#values.has(name)) {
       return this.#values.get(name);
     }
     return this.#defaults.has(name) ? this.#defaults.get(name) : fallback;
   }
+  getStringPref(name, fallback) {
+    return this.#get(name, fallback);
+  }
   getDefaultBranch(root) {
     return {
       setStringPref: (name, value) => this.#defaults.set(root + name, value),
       getStringPref: name => this.#defaults.get(root + name),
+      setBoolPref: (name, value) => this.#defaults.set(root + name, value),
+      getBoolPref: name => this.#defaults.get(root + name),
     };
   }
   prefHasUserValue(name) {
@@ -34,7 +37,7 @@ class FakePrefs {
     this.#values.delete(name);
   }
   getBoolPref(name, fallback) {
-    return this.#values.has(name) ? this.#values.get(name) : fallback;
+    return this.#get(name, fallback);
   }
   getIntPref(name, fallback) {
     return this.#values.has(name) ? this.#values.get(name) : fallback;
@@ -165,6 +168,36 @@ export class FakeZenWorkspaces {
   }
   fireDataChanged() {
     this.win.dispatchEvent(new this.win.CustomEvent("ZenWorkspaceDataChanged"));
+  }
+}
+
+/**
+ * Like Zen's gZenThemePicker: a cached toolbar background per Space. Colors
+ * come out as rgba(); two or more make a gradient, one is a plain color.
+ */
+export class FakeThemePicker {
+  invalidated = [];
+  computed = [];
+  #cache = new Map();
+  getGradientForWorkspace(space) {
+    if (!this.#cache.has(space.uuid)) {
+      this.computed.push(space.uuid);
+      const colors = space.theme.gradientColors.map(color =>
+        typeof color.c === "string" ? color.c : `rgba(${color.c.join(", ")}, 1)`
+      );
+      this.#cache.set(space.uuid, {
+        toolbarGradient:
+          colors.length === 1 ? colors[0] : `linear-gradient(-30deg, ${colors.join(", ")})`,
+      });
+    }
+    return this.#cache.get(space.uuid);
+  }
+  invalidateGradientCache(uuid) {
+    this.invalidated.push(uuid);
+    this.#cache.delete(uuid);
+  }
+  getToolbarModifiedBase() {
+    return "rgba(23, 23, 26, 1)";
   }
 }
 
@@ -308,7 +341,9 @@ export function makeWindow({
   win.requestAnimationFrame = callback =>
     win.setTimeout(() => callback(Date.now()), 16);
   win.cancelAnimationFrame = id => win.clearTimeout(id);
-  doc.createXULElement = tag => doc.createElementNS(XUL_NS, tag);
+  // Plain HTML elements stand in for XUL ones: in jsdom only HTML and SVG
+  // elements get a `style` property, which real XUL elements have.
+  doc.createXULElement = tag => doc.createElement(tag);
   // jsdom has no ResizeObserver; tests drive this one with placeAt().
   win.resizeObservers = [];
   win.ResizeObserver = class {
@@ -330,6 +365,7 @@ export function makeWindow({
   if (zen) {
     win.gZenWorkspaces = new FakeZenWorkspaces(win, spaces, active);
     win.gZenWorkspaces.privateWindowOrDisabled = isPrivate;
+    win.gZenThemePicker = new FakeThemePicker();
   }
   return win;
 }
