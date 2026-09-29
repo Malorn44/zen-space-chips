@@ -38,12 +38,15 @@ These steps use `scripts/deploy.sh` from WSL. It finds your Zen install and prof
 
 ## Settings
 
-Both are in `about:config` (search for `uc.space-chips`) and take effect right away.
+They're all in `about:config` (search for `uc.space-chips`) and take effect right away.
 
 | Pref | Values | Default |
 |---|---|---|
 | `uc.space-chips.mode` | `icon+name`, `icon`, `name` | `icon+name` |
 | `uc.space-chips.divider` | `auto`, `always`, `never` | `auto` |
+| `uc.space-chips.show-border` | `true`, `false` | `true` |
+
+With `show-border` on, each chip gets a ring in its Space's theme colors, taken from the Space's background in Zen. Spaces using Zen's default theme don't get one.
 
 With `auto`, the `|` only shows up when the chips and your bookmarks run into each other: they're touching, the bookmarks are spilling into the » menu, or the chips have started scrolling. If there aren't any bookmarks on the bar, there's no divider. `always` shows it whenever the chips and bookmarks share a toolbar, and after the chips when they don't. `never` turns it off.
 

@@ -48,15 +48,20 @@ The `uc.space-chips.divider` pref has three settings. `auto` (the default) only 
 
 For `auto`, the gap is measured to the bookmarks you can actually see, because Firefox stretches the bookmarks area right up to the chips even when it's empty. The divider's space is always reserved, so it can appear or disappear without anything moving.
 
+## Accent border
+
+Each chip gets a ring in its Space's theme colors. The colors come from Zen: `gZenThemePicker.getGradientForWorkspace()` returns the background Zen paints on the toolbar for that Space, and the ring uses it in the same layout.
+
+Each color in that background has its lightness pulled toward a readable level, with its hue and saturation left alone. There's a version for dark toolbars and one for light toolbars, and the CSS picks between them using Zen's `zen-should-be-dark-mode` marker. The mod clears Zen's cached colors for a Space when its theme changes, and for every Space when light/dark mode switches.
+
+The ring is 2 screen pixels wide at any display scaling. It's a pseudo-element masked down to its edge. The hover and selected fill is a second pseudo-element inset inside the ring, and the chip itself doesn't paint a background.
+
+Spaces on Zen's default theme don't get a ring. Setting `uc.space-chips.show-border` to `false` turns the rings off.
+
 ## Prefs show up in about:config
 
-Both prefs (`uc.space-chips.mode` and `uc.space-chips.divider`) get default values when the mod starts. That way they're listed in about:config before anyone changes them, and Reset puts them back.
+All three prefs (`uc.space-chips.mode`, `uc.space-chips.divider` and `uc.space-chips.show-border`) get default values when the mod starts. That way they're listed in about:config before anyone changes them, and Reset puts them back.
 
-## Not done yet
+## Later
 
-- An option to replace the bookmarks entirely instead of sitting next to them
-- Accent colors from each Space's theme
-- Scrolling the mouse wheel over the chips to change Spaces
-- Keyboard reordering
-- Auto-scrolling the chips while dragging, for when there are too many to fit
-- Custom icons beyond the ones Zen offers
+Package it as a Sine mod.
