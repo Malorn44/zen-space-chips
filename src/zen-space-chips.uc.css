@@ -1,0 +1,148 @@
+/* ==UserScript==
+// @name           Zen Space Chips styles
+// @description    Styling for the Space chips on the bookmarks toolbar
+// ==/UserScript== */
+
+/* Only as wide as the chips, wherever it's placed. The bookmarks keep
+   Firefox's sizing and fill the rest of the toolbar. */
+#zen-space-chips {
+  display: flex;
+  align-items: center;
+  flex: none;
+  -moz-window-dragging: no-drag;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.zen-space-chips-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 50vw;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* The "|" divider. [divider] mirrors the uc.space-chips.divider pref.
+   It sits between the chips and the bookmarks, drawn on whichever of the two
+   comes second, so it disappears when they're in different toolbars.
+   "always" also draws one after the chips when the bookmarks are elsewhere.
+   Customize Toolbar wraps every item, so it's hidden while customizing.
+   test/layout.test.mjs parses these selectors, so keep them flat. */
+/* divider-rules:start */
+#zen-space-chips:not([hidden], [divider="never"]) ~ #personal-bookmarks::before,
+#personal-bookmarks ~ #zen-space-chips:not([hidden], [divider="never"])::before,
+:not(:has(> #personal-bookmarks)) > #zen-space-chips[divider="always"]:not([hidden])::after {
+  content: "";
+  align-self: stretch;
+  flex-shrink: 0;
+  margin: 4px;
+  /* Matches Firefox's toolbarseparator */
+  border-inline-start: 1px solid
+    var(--toolbarseparator-color, color-mix(in srgb, currentColor 30%, transparent));
+}
+/* divider-rules:end */
+
+/* divider=auto while there's still room: keep the slot so nothing shifts
+   when it appears, but don't draw the line. Specificity (2,2,1) beats the
+   rule above (2,1,1). */
+/* divider-idle-rules:start */
+#zen-space-chips[divider="auto"]:not([divider-needed]) ~ #personal-bookmarks::before,
+#personal-bookmarks ~ #zen-space-chips[divider="auto"]:not([divider-needed])::before {
+  border-inline-start-color: transparent;
+}
+/* divider-idle-rules:end */
+
+.zen-space-chip {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 5px;
+  min-width: 26px;
+  height: 24px;
+  margin: 0;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--toolbarbutton-border-radius, 6px);
+  color: inherit;
+  scroll-margin-inline: 12px;
+
+  /* Zen's SVG icons use fill="context-fill", so this tints them to the text color. */
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+  fill-opacity: 0.75;
+
+  opacity: 0.7;
+  transition:
+    opacity 0.15s,
+    background-color 0.15s;
+
+  &:hover {
+    opacity: 1;
+    background-color: color-mix(in srgb, currentColor 10%, transparent);
+  }
+
+  &[active="true"] {
+    opacity: 1;
+    fill-opacity: 1;
+    background-color: color-mix(in srgb, currentColor 16%, transparent);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline, 2px solid AccentColor);
+    outline-offset: -2px;
+  }
+
+  /* While dragging, dim everything but the dragged chip. */
+  #zen-space-chips[reordering] &:not([dragged]) {
+    opacity: 0.45;
+  }
+
+  &[dragged] {
+    opacity: 1;
+    background-color: color-mix(in srgb, currentColor 22%, transparent);
+    cursor: grabbing;
+  }
+}
+
+#zen-space-chips[reordering] {
+  cursor: grabbing;
+}
+
+.zen-space-chip-icon {
+  pointer-events: none;
+  margin: 0;
+
+  &:is(img) {
+    width: 14px;
+    height: 14px;
+    -moz-context-properties: fill, fill-opacity;
+  }
+
+  &:is(label) {
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  &[no-icon="true"] {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: currentColor;
+    opacity: 0.5;
+  }
+}
+
+.zen-space-chip-name {
+  pointer-events: none;
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
