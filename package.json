@@ -1,6 +1,6 @@
 {
   "name": "zen-space-chips",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Zen Browser mod: clickable Space chips on the bookmarks toolbar",
   "type": "module",

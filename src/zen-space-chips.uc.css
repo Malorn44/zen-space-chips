@@ -1,7 +1,5 @@
-/* ==UserScript==
-// @name           Zen Space Chips styles
-// @description    Styling for the Space chips on the bookmarks toolbar
-// ==/UserScript== */
+/* Styles for Zen Space Chips. zen-space-chips.sys.mjs loads this file as an
+   author sheet into each browser window. */
 
 /* Only as wide as the chips, wherever it's placed. The bookmarks keep
    Firefox's sizing and fill the rest of the toolbar. */

@@ -337,6 +337,14 @@ export function makeWindow({
   );
   const win = dom.window;
   const doc = win.document;
+  // Records the stylesheets the mod loads into this window.
+  win.windowUtils = {
+    AUTHOR_SHEET: 2,
+    sheets: [],
+    loadSheetUsingURIString(url, type) {
+      this.sheets.push([url, type]);
+    },
+  };
   // A fixed 16ms frame. jsdom's own frames (pretendToBeVisual) can lag by 60ms or more.
   win.requestAnimationFrame = callback =>
     win.setTimeout(() => callback(Date.now()), 16);

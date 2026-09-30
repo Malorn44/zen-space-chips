@@ -1,0 +1,11 @@
+{
+  "id": "zen-space-chips",
+  "name": "Space Chips",
+  "description": "A chip for each of your Spaces on the bookmarks toolbar. Click to switch, drag to reorder.",
+  "homepage": "https://github.com/Malorn44/zen-space-chips",
+  "version": "0.2.0",
+  "scripts": {
+    "src/zen-space-chips.sys.mjs": {}
+  },
+  "preferences": "preferences.json"
+}

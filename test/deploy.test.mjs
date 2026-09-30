@@ -30,6 +30,30 @@ const TASKLIST_OUTPUT = {
   failing: `exit 1`,
 };
 
+/**
+ * Sets the fixture up the way Sine leaves a profile: its own config.js and
+ * bootloader, and (with `mod`) the mod already installed from Sine.
+ */
+function installSine(fx, { mod = false, allowJS = false } = {}) {
+  writeFileSync(
+    join(fx.install, "config.js"),
+    '// Loads Sine.\nChromeUtils.importESModule("chrome://userscripts/content/sine.sys.mjs");\n'
+  );
+  mkdirSync(join(fx.install, "defaults", "pref"), { recursive: true });
+  writeFileSync(join(fx.install, "defaults", "pref", "config-prefs.js"), "// Sine's prefs\n");
+  mkdirSync(join(fx.chrome, "utils"), { recursive: true });
+  writeFileSync(join(fx.chrome, "utils", "fs.sys.mjs"), "// Sine's bootloader\n");
+  mkdirSync(join(fx.chrome, "JS"), { recursive: true });
+  writeFileSync(join(fx.chrome, "JS", "sine.sys.mjs"), "// Sine\n");
+  if (mod) {
+    mkdirSync(join(fx.chrome, "sine-mods", "zen-space-chips", "src"), { recursive: true });
+    writeFileSync(join(fx.chrome, "sine-mods", "zen-space-chips", "src", "zen-space-chips.sys.mjs"), "// old\n");
+  }
+  if (allowJS) {
+    writeFileSync(join(fx.profile, "prefs.js"), 'user_pref("sine.allow-unsafe-js", true);\n');
+  }
+}
+
 function fixture(t, { chrome = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "zen-chips-deploy-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -134,18 +158,73 @@ test("mod refuses without the loader and copies nothing", t => {
   assert.equal(existsSync(join(fx.chrome, "JS")), false);
 });
 
-test("mod copies the JS and CSS into the profile", t => {
+test("with fx-autoconfig, mod puts the JS and CSS side by side in chrome/JS", t => {
   const fx = fixture(t);
   deploy(fx, ["loader"]);
+  // An older install kept the stylesheet in chrome/CSS.
+  writeFileSync(join(fx.chrome, "CSS", "zen-space-chips.uc.css"), "/* old */");
   const r = deploy(fx, ["mod"]);
   assert.equal(r.status, 0, r.output);
-  for (const [dir, file] of [
-    ["JS", "zen-space-chips.sys.mjs"],
-    ["CSS", "zen-space-chips.uc.css"],
-  ]) {
-    assert.equal(read(join(fx.chrome, dir, file)), read(join(REPO, "src", file)));
+  for (const file of ["zen-space-chips.sys.mjs", "zen-space-chips.uc.css"]) {
+    assert.equal(read(join(fx.chrome, "JS", file)), read(join(REPO, "src", file)));
   }
+  assert.equal(existsSync(join(fx.chrome, "CSS", "zen-space-chips.uc.css")), false);
   assert.ok(existsSync(fx.cache), "cache untouched without --clear-cache");
+});
+
+test("with Sine, loader explains instead of touching Sine's files", t => {
+  const fx = fixture(t, { chrome: true });
+  installSine(fx);
+  const before = read(join(fx.install, "config.js"));
+  const r = deploy(fx, ["loader"]);
+  assert.equal(r.status, 0, r.output);
+  assert.match(r.output, /Sine is installed/);
+  assert.match(r.output, /Malorn44\/zen-space-chips/);
+  assert.equal(read(join(fx.install, "config.js")), before);
+  assert.equal(existsSync(join(fx.chrome, "utils", "boot.sys.mjs")), false);
+  assert.deepEqual(backups(fx), []);
+});
+
+test("with Sine but no mod yet, mod says to install it from Sine", t => {
+  const fx = fixture(t, { chrome: true });
+  installSine(fx);
+  const r = deploy(fx, ["mod"]);
+  assert.notEqual(r.status, 0);
+  assert.match(r.output, /add Malorn44\/zen-space-chips/);
+  assert.equal(existsSync(join(fx.chrome, "sine-mods")), false);
+});
+
+test("with Sine, mod copies local changes over Sine's copy", t => {
+  const fx = fixture(t, { chrome: true });
+  installSine(fx, { mod: true });
+  const r = deploy(fx, ["mod"]);
+  assert.equal(r.status, 0, r.output);
+  const modSrc = join(fx.chrome, "sine-mods", "zen-space-chips", "src");
+  for (const file of ["zen-space-chips.sys.mjs", "zen-space-chips.uc.css"]) {
+    assert.equal(read(join(modSrc, file)), read(join(REPO, "src", file)));
+  }
+  assert.equal(read(join(fx.chrome, "JS", "sine.sys.mjs")), "// Sine\n", "Sine left alone");
+});
+
+test("with Sine, status shows whether it will run the mod's JS", t => {
+  const fx = fixture(t, { chrome: true });
+  installSine(fx, { mod: true });
+  assert.match(deploy(fx, ["status"]).output, /Sine \(JS from outside its store blocked/);
+  installSine(fx, { mod: true, allowJS: true });
+  assert.match(deploy(fx, ["status"]).output, /Sine \(JS from outside its store allowed\)/);
+});
+
+test("with Sine, remove and remove-loader leave Sine's files alone", t => {
+  const fx = fixture(t, { chrome: true });
+  installSine(fx, { mod: true });
+  const remove = deploy(fx, ["remove"]);
+  assert.equal(remove.status, 0, remove.output);
+  assert.match(remove.output, /Remove it from Sine's mod list/);
+  assert.ok(existsSync(join(fx.chrome, "sine-mods", "zen-space-chips", "src", "zen-space-chips.sys.mjs")));
+  const removeLoader = deploy(fx, ["remove-loader"]);
+  assert.notEqual(removeLoader.status, 0);
+  assert.ok(existsSync(join(fx.chrome, "utils", "fs.sys.mjs")));
+  assert.ok(existsSync(join(fx.install, "config.js")));
 });
 
 for (const zen of ["running", "failing"]) {
@@ -200,7 +279,7 @@ test("remove deletes only the mod's own files", t => {
   const r = deploy(fx, ["remove"]);
   assert.equal(r.status, 0, r.output);
   assert.equal(existsSync(join(fx.chrome, "JS", "zen-space-chips.sys.mjs")), false);
-  assert.equal(existsSync(join(fx.chrome, "CSS", "zen-space-chips.uc.css")), false);
+  assert.equal(existsSync(join(fx.chrome, "JS", "zen-space-chips.uc.css")), false);
   assert.ok(existsSync(join(fx.chrome, "utils", "boot.sys.mjs")));
   assert.equal(read(join(fx.chrome, "userChrome.css")), "/* mine */");
 });

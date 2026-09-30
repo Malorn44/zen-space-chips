@@ -1,0 +1,32 @@
+[
+  {
+    "property": "uc.space-chips.mode",
+    "label": "Chip style",
+    "type": "dropdown",
+    "defaultValue": "icon+name",
+    "placeholder": false,
+    "options": [
+      { "value": "icon+name", "label": "Icon and name" },
+      { "value": "icon", "label": "Icon only" },
+      { "value": "name", "label": "Name only" }
+    ]
+  },
+  {
+    "property": "uc.space-chips.divider",
+    "label": "Divider between the chips and bookmarks",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "placeholder": false,
+    "options": [
+      { "value": "auto", "label": "Only when they run into each other" },
+      { "value": "always", "label": "Always" },
+      { "value": "never", "label": "Never" }
+    ]
+  },
+  {
+    "property": "uc.space-chips.show-border",
+    "label": "Ring around each chip in its Space's colors",
+    "type": "checkbox",
+    "defaultValue": true
+  }
+]

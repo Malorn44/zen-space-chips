@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name           Zen Space Chips
 // @description    Clickable chips on the bookmarks toolbar, one per Zen Space
-// @version        0.1.0
+// @version        0.2.0
 // @author         Malorn44
 // ==/UserScript==
 
-// fx-autoconfig imports .sys.mjs files once per session, before any browser
-// window exists. Nothing here depends on the loader, so the same file should
-// also work under Sine.
+// Loaded once per session as a background module, by fx-autoconfig or by
+// Sine, possibly before any browser window exists. Nothing here depends on
+// either loader. The stylesheet next to this file is loaded from here too.
 //
 // Tested with Zen 1.22.3b (Firefox 156). Everything that touches Zen internals
 // goes through the `Zen` object below.
@@ -28,6 +28,8 @@ const DEFAULT_MODE = "icon+name";
 const DEFAULT_DIVIDER = "auto";
 const LOG_PREFIX = "[space-chips]";
 const STARTUP_TOPIC = "browser-delayed-startup-finished";
+// Loaded as an author sheet, the same way under either loader.
+export const STYLESHEET_URL = new URL("zen-space-chips.uc.css", import.meta.url).href;
 const CUSTOMIZABLE_UI_URLS = [
   "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs",
   // Older Firefox builds.
@@ -790,8 +792,26 @@ function onRowMouseDown(event) {
   win.addEventListener("blur", onBlur);
 }
 
+const styledWindows = new WeakSet();
+
+function loadStylesheet(win) {
+  if (styledWindows.has(win) || !win.windowUtils) {
+    return;
+  }
+  styledWindows.add(win);
+  try {
+    win.windowUtils.loadSheetUsingURIString(
+      STYLESHEET_URL,
+      win.windowUtils.AUTHOR_SHEET
+    );
+  } catch (e) {
+    console.error(LOG_PREFIX, "couldn't load the stylesheet", e);
+  }
+}
+
 function buildRow(doc) {
   const win = doc.defaultView;
+  loadStylesheet(win);
   const row = doc.createXULElement("toolbaritem");
   row.setAttribute("id", WIDGET_ID);
   row.className = "chromeclass-toolbar-additional";

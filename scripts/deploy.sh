@@ -8,6 +8,10 @@
 #   scripts/deploy.sh remove          remove the mod files
 #   scripts/deploy.sh remove-loader   remove fx-autoconfig files that are unchanged
 #
+# Works with either loader. With fx-autoconfig, the mod goes in chrome/JS.
+# With Sine, install the mod from Sine first; `mod` then copies local changes
+# over Sine's copy in chrome/sine-mods, for testing before a push.
+#
 # It never overwrites or deletes a file that differs from what it installs,
 # and only clears the startup cache when it can confirm Zen isn't running.
 #
@@ -25,6 +29,7 @@ FXAC_DIR="$REPO/reference/fx-autoconfig"
 
 MOD_JS="zen-space-chips.sys.mjs"
 MOD_CSS="zen-space-chips.uc.css"
+SINE_REPO="Malorn44/zen-space-chips"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -76,6 +81,7 @@ ZEN_INSTALL="${ZEN_INSTALL:-$(find_install "$LOCAL_APPDATA")}"
 ZEN_PROFILE="${ZEN_PROFILE:-$(find_profile "$ROAMING_APPDATA")}"
 STARTUP_CACHE="${ZEN_STARTUP_CACHE:-$LOCAL_APPDATA/zen/Profiles/$(basename "$ZEN_PROFILE")/startupCache}"
 CHROME="$ZEN_PROFILE/chrome"
+SINE_MOD_DIR="$CHROME/sine-mods/zen-space-chips"
 
 # Prints running, stopped, or unknown (tasklist failed or said something odd).
 zen_state() {
@@ -100,6 +106,32 @@ loader_installed() {
   [[ -f "$ZEN_INSTALL/config.js" &&
      -f "$ZEN_INSTALL/defaults/pref/config-prefs.js" &&
      -f "$CHROME/utils/boot.sys.mjs" ]]
+}
+
+# Sine's config.js loads Sine instead of fx-autoconfig.
+sine_installed() {
+  [[ -f "$ZEN_INSTALL/config.js" ]] && grep -q "sine.sys.mjs" "$ZEN_INSTALL/config.js"
+}
+
+# Sine only runs JS from mods outside its store with this pref on.
+sine_allows_js() {
+  grep -q '"sine.allow-unsafe-js", true' "$ZEN_PROFILE/prefs.js" 2>/dev/null
+}
+
+sine_install_hint() {
+  say "Install the mod from Sine: add $SINE_REPO as a mod from GitHub."
+  say "Sine only runs its script with 'sine.allow-unsafe-js' turned on, since it's not in Sine's store."
+}
+
+# Prints each mod file the current loader uses, as "installed|source" lines.
+mod_files() {
+  if sine_installed; then
+    printf '%s|%s\n' "$SINE_MOD_DIR/src/$MOD_JS" "$REPO/src/$MOD_JS"
+    printf '%s|%s\n' "$SINE_MOD_DIR/src/$MOD_CSS" "$REPO/src/$MOD_CSS"
+  else
+    printf '%s|%s\n' "$CHROME/JS/$MOD_JS" "$REPO/src/$MOD_JS"
+    printf '%s|%s\n' "$CHROME/JS/$MOD_CSS" "$REPO/src/$MOD_CSS"
+  fi
 }
 
 ensure_fxac_source() {
@@ -135,22 +167,37 @@ cmd_status() {
   check_paths
   say "Zen install : $ZEN_INSTALL ($(grep -m1 '^Version=' "$ZEN_INSTALL/application.ini" | cut -d= -f2))"
   say "Profile     : $ZEN_PROFILE"
-  if loader_installed; then say "Loader      : fx-autoconfig installed"; else say "Loader      : not installed"; fi
-  local f
-  for f in "JS/$MOD_JS" "CSS/$MOD_CSS"; do
-    if [[ ! -f "$CHROME/$f" ]]; then
-      say "Mod file    : $f missing"
-    elif cmp -s "$CHROME/$f" "$REPO/src/$(basename "$f")"; then
-      say "Mod file    : $f up to date"
+  if sine_installed; then
+    if sine_allows_js; then
+      say "Loader      : Sine (JS from outside its store allowed)"
     else
-      say "Mod file    : $f differs from src/"
+      say "Loader      : Sine (JS from outside its store blocked: turn on sine.allow-unsafe-js)"
     fi
-  done
+  elif loader_installed; then
+    say "Loader      : fx-autoconfig"
+  else
+    say "Loader      : none"
+  fi
+  local dest src
+  while IFS='|' read -r dest src; do
+    if [[ ! -f "$dest" ]]; then
+      say "Mod file    : ${dest#"$CHROME/"} missing"
+    elif cmp -s "$dest" "$src"; then
+      say "Mod file    : ${dest#"$CHROME/"} up to date"
+    else
+      say "Mod file    : ${dest#"$CHROME/"} differs from src/"
+    fi
+  done < <(mod_files)
   say "Zen         : $(zen_state)"
 }
 
 cmd_loader() {
   check_paths
+  if sine_installed; then
+    say "Sine is installed and loads the mod itself, so fx-autoconfig isn't needed."
+    sine_install_hint
+    return
+  fi
   ensure_fxac_source
 
   # Check everything before writing anything.
@@ -183,7 +230,15 @@ cmd_loader() {
 
 cmd_mod() {
   check_paths
-  loader_installed || die "fx-autoconfig isn't installed; run scripts/deploy.sh loader"
+  if sine_installed; then
+    if [[ ! -d "$SINE_MOD_DIR" ]]; then
+      say "Sine is installed, but it doesn't have the mod yet."
+      sine_install_hint
+      exit 1
+    fi
+  else
+    loader_installed || die "no loader installed; run scripts/deploy.sh loader, or install Sine"
+  fi
   local clear_cache=false
   if [[ "${1:-}" == "--clear-cache" ]]; then
     clear_cache=true
@@ -192,10 +247,15 @@ cmd_mod() {
     [[ "$state" == "stopped" ]] ||
       die "can't confirm Zen is closed (state: $state), so the cache wasn't cleared. Nothing changed."
   fi
-  mkdir -p "$CHROME/JS" "$CHROME/CSS"
-  cp "$REPO/src/$MOD_JS" "$CHROME/JS/$MOD_JS"
-  cp "$REPO/src/$MOD_CSS" "$CHROME/CSS/$MOD_CSS"
-  say "Copied $MOD_JS to chrome/JS and $MOD_CSS to chrome/CSS"
+  local dest src
+  while IFS='|' read -r dest src; do
+    mkdir -p "$(dirname "$dest")"
+    cp "$src" "$dest"
+    say "Copied $(basename "$src") to ${dest#"$CHROME/"}"
+  done < <(mod_files)
+  # Older installs kept the stylesheet in chrome/CSS, where fx-autoconfig
+  # would load it a second time.
+  rm -f "$CHROME/CSS/$MOD_CSS"
   if $clear_cache; then
     rm -rf "$STARTUP_CACHE"
     say "Cleared the startup cache. Start Zen to load the mod."
@@ -206,13 +266,20 @@ cmd_mod() {
 
 cmd_remove() {
   check_paths
-  rm -f "$CHROME/JS/$MOD_JS" "$CHROME/CSS/$MOD_CSS"
+  if sine_installed; then
+    say "Sine manages this mod. Remove it from Sine's mod list instead."
+    return
+  fi
+  rm -f "$CHROME/JS/$MOD_JS" "$CHROME/JS/$MOD_CSS" "$CHROME/CSS/$MOD_CSS"
   say "Removed the mod files."
   restart_hint
 }
 
 cmd_remove_loader() {
   check_paths
+  if sine_installed; then
+    die "Sine is the loader here, not fx-autoconfig. Nothing changed."
+  fi
   ensure_fxac_source
   local dest src kept=()
   while IFS='|' read -r dest src; do
