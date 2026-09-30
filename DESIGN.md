@@ -2,11 +2,13 @@
 
 Zen Space Chips adds a chip for each Zen Space to the bookmarks toolbar. Click a chip to switch Spaces, drag one to reorder them. These are the decisions behind it.
 
-## fx-autoconfig as the loader
+## Sine or fx-autoconfig
 
-Zen's built-in mod system only runs CSS, and the chips need JavaScript. Sine can run JS, but it takes over Zen's built-in mods, installs only from GitHub, and won't load JS from outside its store unless you turn on an "unsafe" setting. fx-autoconfig is a couple of small files and doesn't touch anything else.
+The mod runs under either Sine or fx-autoconfig. It's one background module that doesn't use either loader's API.
 
-The mod itself doesn't use any fx-autoconfig APIs. Moving to Sine later would only need a manifest.
+For Sine, `theme.json` declares that module as the mod's script, and `preferences.json` puts the three prefs in Sine's settings for the mod. Sine installs it from the GitHub repo. For fx-autoconfig, `scripts/deploy.sh` installs the loader and copies the module into the profile.
+
+The module loads its own stylesheet, from the file next to it, as an author sheet in each window. The CSS applies the same way under both loaders.
 
 ## A new toolbar widget
 
@@ -22,7 +24,7 @@ These are internal APIs and can change with any Zen update. All of them go throu
 
 ## Wait for the first window
 
-fx-autoconfig loads the module very early, possibly before Firefox has read the saved toolbar layout. Loading `CustomizableUI` at that point could pick up the default layout and save it over the user's, so the widget registers only after the first window finishes starting.
+The loader may import the module very early, possibly before Firefox has read the saved toolbar layout. Loading `CustomizableUI` at that point could pick up the default layout and save it over the user's, so the widget registers only after the first window finishes starting.
 
 ## Keep the clicked Space highlighted
 
@@ -61,7 +63,3 @@ Spaces on Zen's default theme don't get a ring. Setting `uc.space-chips.show-bor
 ## Prefs show up in about:config
 
 All three prefs (`uc.space-chips.mode`, `uc.space-chips.divider` and `uc.space-chips.show-border`) get default values when the mod starts. That way they're listed in about:config before anyone changes them, and Reset puts them back.
-
-## Later
-
-Package it as a Sine mod.

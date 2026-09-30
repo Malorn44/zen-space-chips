@@ -14,6 +14,19 @@ It's tested with Zen 1.22.3b on Windows. The mod uses Zen internals, so a Zen up
 
 ## Install
 
+The mod needs a script loader, since Zen's own mods only run CSS. It works with Sine or with fx-autoconfig.
+
+### With Sine
+
+1. Turn on `sine.allow-unsafe-js`, in Sine's settings or in `about:config`. The mod isn't in Sine's store, and Sine only runs scripts from mods outside it with this on.
+2. In Sine's settings, add a mod from GitHub: `Malorn44/zen-space-chips`.
+3. Restart Zen.
+4. Press Ctrl+Shift+B if the bookmarks toolbar is hidden. It is by default in Zen.
+
+Sine keeps the mod updated from GitHub, and its settings for the mod have the same options as the prefs below.
+
+### With fx-autoconfig
+
 These steps use `scripts/deploy.sh` from WSL. It finds your Zen install and profile on its own. If it picks the wrong ones, set `ZEN_INSTALL` and `ZEN_PROFILE`.
 
 1. Install fx-autoconfig, the script loader:
@@ -34,11 +47,11 @@ These steps use `scripts/deploy.sh` from WSL. It finds your Zen install and prof
 
 4. Press Ctrl+Shift+B if the bookmarks toolbar is hidden. It is by default in Zen.
 
-`scripts/deploy.sh status` shows what's installed and whether Zen is running.
+`scripts/deploy.sh status` shows which loader is installed, whether the mod is there, and whether Zen is running.
 
 ## Settings
 
-They're all in `about:config` (search for `uc.space-chips`) and take effect right away.
+They're all in `about:config` (search for `uc.space-chips`), and in Sine's settings for the mod if you use Sine. Changes take effect right away.
 
 | Pref | Values | Default |
 |---|---|---|
@@ -74,7 +87,9 @@ npm test
 scripts/deploy.sh mod
 ```
 
-The mod is `src/zen-space-chips.sys.mjs` and `src/zen-space-chips.uc.css`. Every call into Zen goes through the `Zen` object at the top of the JS file. The tests run the mod against fake Zen and Firefox objects in jsdom, and run `deploy.sh` against temporary folders.
+The mod is `src/zen-space-chips.sys.mjs` and `src/zen-space-chips.uc.css`, which the JS file loads itself. Every call into Zen goes through the `Zen` object at the top of the JS file. `theme.json` and `preferences.json` are for Sine. The tests run the mod against fake Zen and Firefox objects in jsdom, and run `deploy.sh` against temporary folders.
+
+`scripts/deploy.sh mod` copies `src/` into whichever loader you have. With Sine it goes over the copy Sine installed, so you can try changes before pushing them. Sine replaces it again the next time it updates the mod.
 
 `reference/` isn't committed. `deploy.sh loader` downloads fx-autoconfig into it at a pinned commit if it's missing.
 
@@ -82,11 +97,17 @@ The mod is `src/zen-space-chips.sys.mjs` and `src/zen-space-chips.uc.css`. Every
 
 No chips at all: open the Browser Console (Ctrl+Shift+J) and look for `[space-chips]`. "Spaces API was not found" means a Zen update changed something the mod depends on.
 
-To check that the loader is running, press Alt to show the menu bar and look for Tools > userScripts. If it's not there, clear the startup cache. A Zen reinstall removes the loader's files from the install folder, so run `scripts/deploy.sh loader` again after one.
+With Sine, check that the mod is enabled in Sine's settings and that `sine.allow-unsafe-js` is on. `scripts/deploy.sh status` shows the second one too.
+
+With fx-autoconfig, press Alt to show the menu bar and look for Tools > userScripts to check the loader is running. If it's not there, clear the startup cache. A Zen reinstall removes the loader's files from the install folder, so run `scripts/deploy.sh loader` again after one.
 
 If the chips look off, Zen's own CSS may be overriding the mod's. The Browser Toolbox (Ctrl+Alt+Shift+I) will show you which rule wins.
 
 ## Uninstall
+
+With Sine, remove the mod in Sine's settings.
+
+With fx-autoconfig:
 
 ```bash
 scripts/deploy.sh remove          # just the mod
