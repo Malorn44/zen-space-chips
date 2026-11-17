@@ -159,6 +159,39 @@
 }
 /* accent-rules:end */
 
+/* Since Zen 1.24 the Space gradients refer to CSS variables
+   (--zen-gradient-base-angle/-start/-span, and --zen-gradient-width for
+   three-color themes) that Zen only defines on its own background elements
+   (.zen-browser-generic-background, .zen-library-space). The chips sit
+   outside those, so the ring's background came out invalid and transparent.
+   This is Zen's own derivation from zen-browser-ui.css, sized to a chip
+   instead of the window. The width is an approximation of a typical chip.
+   It has to be on the chip, not its ::after: the JS sets --space-accent-* on
+   the chip, and var() inside a custom property resolves where it's declared. */
+#zen-space-chips .zen-space-chip[has-accent] {
+  --zen-gradient-width: 80px;
+  --zen-gradient-height: 24px;
+  --zen-gradient-tilt: 1;
+  --zen-gradient-phi: atan2(var(--zen-gradient-height), var(--zen-gradient-width));
+  --zen-gradient-tan: tan(var(--zen-gradient-phi));
+  --zen-gradient-dx: min(
+    var(--zen-gradient-width),
+    var(--zen-gradient-width) / (var(--zen-gradient-tan) * var(--zen-gradient-tilt))
+  );
+  --zen-gradient-dy: min(
+    var(--zen-gradient-height),
+    var(--zen-gradient-height) * var(--zen-gradient-tan) * var(--zen-gradient-tilt)
+  );
+  --zen-gradient-slope: atan2(var(--zen-gradient-dy), var(--zen-gradient-dx));
+  --zen-gradient-base-angle: calc(90deg + var(--zen-gradient-slope));
+  --zen-gradient-sin: sin(var(--zen-gradient-slope));
+  --zen-gradient-cos: cos(var(--zen-gradient-slope));
+  --zen-gradient-x0: calc((var(--zen-gradient-width) - var(--zen-gradient-dx)) / 2);
+  --zen-gradient-y0: calc((var(--zen-gradient-height) - var(--zen-gradient-dy)) / 2);
+  --zen-gradient-base-start: calc(var(--zen-gradient-x0) * var(--zen-gradient-cos) + var(--zen-gradient-y0) * var(--zen-gradient-sin));
+  --zen-gradient-base-span: calc(var(--zen-gradient-dx) * var(--zen-gradient-cos) + var(--zen-gradient-dy) * var(--zen-gradient-sin));
+}
+
 :root[zen-should-be-dark-mode="false"] #zen-space-chips[show-border] .zen-space-chip[has-accent]::after {
   background: var(--space-accent-light);
 }
